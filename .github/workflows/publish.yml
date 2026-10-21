@@ -1,0 +1,35 @@
+name: Instagram'a paylaş
+on:
+  schedule:
+    - cron: '7,37 5-19 * * *'   # UTC; Türkiye saatiyle 08:07–22:37 arası yarım saatte bir
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: { group: instagram-publish, cancel-in-progress: false }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }          # ÖNEMLİ: tetiklendiği anın değil, en güncel sıranın kopyası
+      - id: pub
+        run: python3 scripts/publish.py
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          MEDIA_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      - name: Paylaşılanı posted/ klasörüne taşı
+        if: steps.pub.outputs.folder != ''
+        run: |
+          git config user.name "paylasim-bot"
+          git config user.email "paylasim-bot@users.noreply.github.com"
+          mkdir -p posted
+          git mv "queue/${{ steps.pub.outputs.folder }}" "posted/${{ steps.pub.outputs.folder }}"
+          echo "${{ steps.pub.outputs.media_id }}" > "posted/${{ steps.pub.outputs.folder }}/MEDIA_ID"
+          # Pages 1 GB sınırını aşmamak için paylaşılan videoyu depodan kaldır (kapak ve post.json kalır)
+          git rm -q --ignore-unmatch "posted/${{ steps.pub.outputs.folder }}"/*.mp4 || true
+          git add -A posted queue
+          git commit -m "Paylaşıldı: ${{ steps.pub.outputs.folder }}"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
