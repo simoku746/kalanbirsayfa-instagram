@@ -127,6 +127,14 @@ def check():
           f"takipçi {me.get('followers_count')} · gönderi {me.get('media_count')}")
 
 
+def approved(d, post):
+    # Only videos approved on the review page are posted: queue/<slug>/APPROVED holds the md5 of the approved video file,
+    # so a re-rendered video needs a fresh approval.
+    import hashlib
+    a, v = d / 'APPROVED', d / post.get('files', ['1.mp4'])[0]
+    return a.exists() and v.exists() and a.read_text().strip() == hashlib.md5(v.read_bytes()).hexdigest()
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'check':
         return check()
@@ -138,6 +146,9 @@ def main():
         if f.exists():
             post = json.loads(f.read_text(encoding='utf-8'))
             if due_at(post) <= now_local():
+                if not approved(d, post):
+                    print(f'{d.name}: zamanı geldi ama henüz onaylanmadı; bekliyor.')
+                    continue
                 due.append((d, post))
     due.sort(key=lambda x: (due_at(x[1]), x[0].name))
     if not due:
